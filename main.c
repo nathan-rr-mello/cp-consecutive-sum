@@ -28,7 +28,7 @@ void encontrar_maior_representacao(int limite) {
 }
 
 int main() {
-    int limite = 10000000; //10_000_000
+    int limite = 25000000; //25_000_000
     encontrar_maior_representacao(limite);
     return 0;
 }
