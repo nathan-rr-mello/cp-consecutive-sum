@@ -59,8 +59,10 @@ void encontrar_maior_representacao_trivial(int limite) {
 
 int main() {
     int limite = 25000000; //25_000_000
-    omp_set_num_threads(12);
     //int limite = 9;
+    omp_set_num_threads(12);
+    double start = omp_get_wtime();
     encontrar_maior_representacao(limite);
-    return 0;
+    double end = omp_get_wtime();
+    printf("Work took %f seconds\n", end - start);
 }
