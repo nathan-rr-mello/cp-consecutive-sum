@@ -64,8 +64,7 @@ void realiza_trabalho() {
         int source = 0;
         int range[2];
         MPI_Status status; // estrutura que guarda o estado de retorno
-        printf("realiza trabalho\n");
-        MPI_Recv(range, 2, MPI_INT, source, TRABALHO, MPI_COMM_WORLD, &status);
+        MPI_Recv(range, 2, MPI_INT, source, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 
         if (status.MPI_TAG != TERMINAR) {
             int inicio = range[0];
@@ -100,7 +99,6 @@ void envia_trabalho(int proc_n, int limite, int grao) {
         // recebe resultado
         int resposta[2];
         MPI_Status status; // estrutura que guarda o estado de retorno
-        printf("envia trabalho");
         MPI_Recv(resposta, 2, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         Resultado resultado = {resposta[0], resposta[1]};
         if (resultado.somas > maior_resultado.somas) {
