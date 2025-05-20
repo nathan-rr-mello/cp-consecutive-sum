@@ -1,14 +1,17 @@
 #include <stdio.h>
-#include "mpi.h"
+#include <mpi.h>
 
-typedef struct
-{
+typedef struct {
     int numero;
     int somas;
 } Resultado;
 
-Resultado contar_somas_consecutivas(int n)
-{
+enum Tag {
+    TRABALHO = 50,
+    TERMINAR = 51
+};
+
+Resultado contar_somas_consecutivas(int n) {
     int count = 0;
     for (int k = 2; k * (k - 1) / 2 < n; k++)
     {
@@ -35,18 +38,18 @@ Resultado encontrar_maior_representacao_trivial(int inicio, int fim) {
         }
     }
 
-    // printf("Número com mais representações entre 1 e %d: %d\n", limite, maior_resultado.numero);
-    // printf("Total de formas: %d\n", maior_resultado.somas);
     return maior_resultado;
 }
-void separa_trabalho(int proc_n, int limite) {
+
+void rajada_inicial(int proc_n, int limite, int grao) {
 
     int tag = 50;
     for (int i = 1; i < proc_n; i++) {
-
-        int inicio = (limite / proc_n) * i + 1;
-        int fim = (limite / proc_n) * (i + 1);
-        if (i == proc_n - 1) {
+        //int inicio = (limite / proc_n) * i + 1;
+        int inicio = (i - 1) * grao + 1;
+        //int fim = (limite / proc_n) * (i + 1);
+        int fim = i * grao;
+        if (fim > limite) {
             fim = limite;
         }
         int range[2] = {inicio, fim};
@@ -55,40 +58,75 @@ void separa_trabalho(int proc_n, int limite) {
 }
 
 void realiza_trabalho() {
+    
+    while (1) {
 
-    int source = 0;
-    int tag = 50;
-    int range[2];
-    MPI_Status status; // estrutura que guarda o estado de retorno
-    MPI_Recv(range, 2, MPI_INT, source, tag, MPI_COMM_WORLD, &status);
-    int inicio = range[0];
-    int fim = range[1];
+        int source = 0;
+        int range[2];
+        MPI_Status status; // estrutura que guarda o estado de retorno
+        printf("realiza trabalho\n");
+        MPI_Recv(range, 2, MPI_INT, source, TRABALHO, MPI_COMM_WORLD, &status);
 
-    Resultado resultado = encontrar_maior_representacao_trivial(inicio, fim);
-    int maior_resultado[2] = {resultado.numero, resultado.somas};
-    MPI_Send(maior_resultado, 2, MPI_INT, source, tag, MPI_COMM_WORLD);
+        if (status.MPI_TAG != TERMINAR) {
+            int inicio = range[0];
+            int fim = range[1];
+
+            Resultado resultado = encontrar_maior_representacao_trivial(inicio, fim);
+            int maior_resultado[2] = {resultado.numero, resultado.somas};
+            MPI_Send(maior_resultado, 2, MPI_INT, source, TRABALHO, MPI_COMM_WORLD);
+        } else {
+            break;
+        }
+    }
 }
 
-void finaliza_trabalho(int proc_n, int limite) {
+void envia_trabalho(int proc_n, int limite, int grao) {
 
     Resultado maior_resultado = {0, 0};
-    int tag = 50;
-    MPI_Status status; // estrutura que guarda o estado de retorno
-    for (int i = 1; i < proc_n; i++) {
+    // int tag = 50;
+    // MPI_Status status; // estrutura que guarda o estado de retorno
+    // for (int i = 1; i < proc_n; i++) {
+    //     int resposta[2];
+    //     MPI_Recv(resposta, 2, MPI_INT, i, tag, MPI_COMM_WORLD, &status);
+    //     Resultado resultado = {resposta[0], resposta[1]};
+    //     if (resultado.somas > maior_resultado.somas) {
+    //         maior_resultado = resultado;
+	// 	}
+    // }
+
+    int terminaram = 0;
+    int inicio = (proc_n - 1) * grao + 1; // começa depois da primeira rajada
+    for (int i = inicio; terminaram < proc_n - 1; i += grao) {
+        // recebe resultado
         int resposta[2];
-        MPI_Recv(resposta, 2, MPI_INT, i, tag, MPI_COMM_WORLD, &status);
+        MPI_Status status; // estrutura que guarda o estado de retorno
+        printf("envia trabalho");
+        MPI_Recv(resposta, 2, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         Resultado resultado = {resposta[0], resposta[1]};
         if (resultado.somas > maior_resultado.somas) {
             maior_resultado = resultado;
 		}
+
+        // se houver trabalho
+        if (i < limite) {
+            // envia mais trabalho
+            int fim = i + grao - 1;
+            if (fim > limite) {
+                fim = limite;
+            }
+            int range[2] = {i, fim};
+            MPI_Send(range, 2, MPI_INT, status.MPI_SOURCE, TRABALHO, MPI_COMM_WORLD);
+        } else {
+            // avisa que acabou
+            //MPI_Send(NULL, 0, MPI_DATATYPE_NULL, status.MPI_SOURCE, TERMINAR, MPI_COMM_WORLD);
+            int vazio[2] = {0, 0};
+            MPI_Send(vazio, 2, MPI_INT, status.MPI_SOURCE, TERMINAR, MPI_COMM_WORLD);
+            terminaram++;
+        }
     }
 
     printf("Número com mais representações entre 1 e %d: %d\n", limite, maior_resultado.numero);
     printf("Total de formas: %d\n", maior_resultado.somas);
-}
-
-void pede_trabalho() {
-   MPI_Send(maior_resultado, 2, MPI_INT, source, tag, MPI_COMM_WORLD);
 }
 
 int main(int argc, char** argv)
@@ -100,6 +138,8 @@ int main(int argc, char** argv)
     int message;       // Buffer para as mensagens
     MPI_Status status; // estrutura que guarda o estado de retorno
 
+    int grao = 100; // o tamanho do range que será enviado
+
     MPI_Init(&argc, &argv); // funcao que inicializa o MPI, todo o codigo paralelo estah abaixo
 
     double t1,t2;
@@ -109,8 +149,8 @@ int main(int argc, char** argv)
     MPI_Comm_size(MPI_COMM_WORLD, &proc_n);  // pega informacao do numero de processos (quantidade total)
 
     if (my_rank == 0) {
-        separa_trabalho(proc_n, limite);
-        finaliza_trabalho(proc_n, limite);
+        rajada_inicial(proc_n, limite, grao);
+        envia_trabalho(proc_n, limite, grao);
         t2 = MPI_Wtime(); // termina a contagem do tempo
         printf("\nTempo de execucao: %f\n\n", t2-t1);
     } else {
