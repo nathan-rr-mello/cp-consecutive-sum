@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <omp.h>
 #include <mpi.h>
+#include <string.h>
 
 typedef struct {
     int numero;
@@ -134,12 +135,18 @@ int main(int argc, char** argv)
     int grao = 100; // o tamanho do range que será enviado
 
     MPI_Init(&argc, &argv); // funcao que inicializa o MPI, todo o codigo paralelo estah abaixo
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank); // pega pega o numero do processo atual (rank)
+    MPI_Comm_size(MPI_COMM_WORLD, &proc_n);  // pega informacao do numero de processos (quantidade total)
+    char coordenador[MPI_MAX_PROCESSOR_NAME];
+    int name_len;
+    MPI_Get_processor_name(coordenador, &name_len);
+    MPI_Bcast(coordenador, MPI_MAX_PROCESSOR_NAME, MPI_CHAR, 0, MPI_COMM_WORLD);
+
+    char my_hostname[MPI_MAX_PROCESSOR_NAME];
+    MPI_Get_processor_name(my_hostname, &name_len);
 
     double t1,t2;
     t1 = MPI_Wtime();  // inicia a contagem do tempo
-
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank); // pega pega o numero do processo atual (rank)
-    MPI_Comm_size(MPI_COMM_WORLD, &proc_n);  // pega informacao do numero de processos (quantidade total)
 
     if (my_rank == 0) {
         omp_set_num_threads(7);
@@ -154,10 +161,13 @@ int main(int argc, char** argv)
         printf("\nTempo de execucao total: %f\n\n", t2-t1);
     } else {
         omp_set_num_threads(8);
+        if (strcmp(coordenador, my_hostname) == 0) {
+            omp_set_num_threads(7);
+        }
         double start = omp_get_wtime();
         realiza_trabalho();
         double end = omp_get_wtime();
-        printf("Nó  %d - Work took %f seconds\n", proc_n, end - start);
+        printf("Nó  %d - Work took %f seconds\n", my_rank, end - start);
     }
 
     MPI_Finalize(); // funcao que finaliza o MPI, todo o codigo paralelo estah acima
